@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Twitter Auto Poster</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #f9f9f8; --surface: #ffffff; --border: rgba(0,0,0,0.1);
+  --border-focus: rgba(0,0,0,0.35); --text: #1a1a1a; --text-muted: #666;
+  --text-hint: #999; --accent: #1d9bf0; --accent-bg: #e8f4fd;
+  --success-bg: #edf7ed; --success-text: #2d6a2d;
+  --danger: #d32f2f; --danger-bg: #fdeaea;
+  --radius: 10px; --radius-sm: 6px;
+}
+body { font-family: -apple-system,'Helvetica Neue',sans-serif; background:var(--bg); color:var(--text); font-size:14px; line-height:1.6; }
+
+/* ── Login screen ── */
+.login-wrap { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:1rem; }
+.login-card { background:var(--surface); border:0.5px solid var(--border); border-radius:var(--radius); padding:2rem; width:100%; max-width:380px; }
+.login-logo { display:flex; align-items:center; gap:10px; font-size:17px; font-weight:600; margin-bottom:1.75rem; }
+.login-logo svg { flex-shrink:0; }
+
+/* ── App layout ── */
+.layout { display:grid; grid-template-columns:220px 1fr; min-height:100vh; }
+.sidebar { background:var(--surface); border-right:0.5px solid var(--border); padding:1.5rem 1rem; display:flex; flex-direction:column; gap:4px; }
+.sidebar-logo { font-size:15px; font-weight:600; padding:0 0.5rem 1rem; border-bottom:0.5px solid var(--border); margin-bottom:0.5rem; display:flex; align-items:center; gap:8px; }
+.nav-item { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:var(--radius-sm); cursor:pointer; color:var(--text-muted); font-size:13px; transition:all .12s; }
+.nav-item:hover { background:var(--bg); color:var(--text); }
+.nav-item.active { background:var(--accent-bg); color:var(--accent); font-weight:500; }
+.nav-icon { width:16px; text-align:center; font-size:15px; }
+.sidebar-bottom { margin-top:auto; border-top:0.5px solid var(--border); padding-top:10px; }
+.user-pill { display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:var(--radius-sm); font-size:12px; }
+.user-avatar { width:28px; height:28px; border-radius:50%; background:var(--accent-bg); color:var(--accent); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:600; flex-shrink:0; }
+.main { padding:2rem; max-width:800px; }
+.page { display:none; }
+.page.active { display:block; }
+.page-title { font-size:20px; font-weight:600; margin-bottom:1.5rem; }
+
+/* ── Common UI ── */
+.card { background:var(--surface); border:0.5px solid var(--border); border-radius:var(--radius); padding:1.25rem; margin-bottom:1rem; }
+.card-title { font-size:12px; font-weight:500; color:var(--text-muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:.75rem; }
+label { display:block; font-size:12px; color:var(--text-muted); margin-bottom:4px; }
+input[type=text],input[type=datetime-local],input[type=password],textarea,select {
+  width:100%; padding:8px 10px; border:0.5px solid var(--border); border-radius:var(--radius-sm);
+  background:var(--bg); color:var(--text); font-size:13px; font-family:inherit; transition:border-color .15s; outline:none;
+}
+input:focus,textarea:focus,select:focus { border-color:var(--border-focus); }
+textarea { resize:vertical; min-height:88px; line-height:1.5; }
+.row2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.btn { display:inline-flex; align-items:center; gap:6px; padding:8px 14px; border-radius:var(--radius-sm); font-size:13px; font-weight:500; cursor:pointer; border:0.5px solid var(--border); background:var(--surface); color:var(--text); transition:all .12s; }
+.btn:hover { background:var(--bg); }
+.btn-primary { background:var(--text); color:var(--bg); border-color:var(--text); }
+.btn-primary:hover { opacity:.85; }
+.btn-ai { border-color:var(--accent); color:var(--accent); background:var(--accent-bg); }
+.btn-ai:hover { background:#d0e9fa; }
+.btn-danger { color:var(--danger); border-color:var(--danger); }
+.btn-danger:hover { background:var(--danger-bg); }
+.btn-sm { padding:5px 10px; font-size:12px; }
+.btn:disabled { opacity:.4; cursor:not-allowed; }
+.chips { display:flex; flex-wrap:wrap; gap:6px; }
+.chip { padding:5px 12px; border:0.5px solid var(--border); border-radius:20px; font-size:12px; cursor:pointer; color:var(--text-muted); transition:all .12s; }
+.chip:hover { border-color:var(--accent); color:var(--accent); }
+.chip.selected { background:var(--accent-bg); border-color:var(--accent); color:var(--accent); font-weight:500; }
+.post-block { border:0.5px solid var(--border); border-radius:var(--radius); padding:1rem; margin-bottom:10px; }
+.post-block-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+.post-num { font-size:11px; font-weight:600; color:var(--accent); background:var(--accent-bg); padding:2px 10px; border-radius:20px; }
+.char-count { font-size:11px; text-align:right; color:var(--text-hint); margin-top:3px; }
+.char-over { color:var(--danger); }
+.img-area { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:8px; }
+.img-slot { width:56px; height:56px; border-radius:var(--radius-sm); overflow:hidden; position:relative; border:0.5px solid var(--border); flex-shrink:0; }
+.img-slot img { width:100%; height:100%; object-fit:cover; }
+.img-rm { position:absolute; top:2px; right:2px; width:16px; height:16px; border-radius:50%; background:rgba(0,0,0,.55); color:#fff; border:none; cursor:pointer; font-size:10px; display:flex; align-items:center; justify-content:center; }
+.add-img { width:56px; height:56px; border:0.5px dashed var(--border); border-radius:var(--radius-sm); display:flex; flex-direction:column; align-items:center; justify-content:center; cursor:pointer; color:var(--text-hint); font-size:20px; background:none; gap:2px; }
+.add-img:hover { border-color:var(--accent); color:var(--accent); }
+.badge { display:inline-block; padding:2px 8px; border-radius:20px; font-size:11px; font-weight:500; }
+.badge-pending { background:#fff8e1; color:#8c6d00; }
+.badge-posted { background:var(--success-bg); color:var(--success-text); }
+.badge-failed { background:var(--danger-bg); color:var(--danger); }
+.badge-cancelled { background:var(--bg); color:var(--text-hint); }
+.badge-admin { background:var(--accent-bg); color:var(--accent); }
+.badge-member { background:var(--bg); color:var(--text-muted); }
+.badge-active { background:var(--success-bg); color:var(--success-text); }
+.badge-inactive { background:var(--danger-bg); color:var(--danger); }
+.post-table { width:100%; border-collapse:collapse; font-size:13px; }
+.post-table th { text-align:left; font-size:11px; color:var(--text-muted); font-weight:500; padding:6px 8px; border-bottom:0.5px solid var(--border); }
+.post-table td { padding:10px 8px; border-bottom:0.5px solid var(--border); vertical-align:top; }
+.post-table tr:last-child td { border-bottom:none; }
+.post-text-preview { max-width:240px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.alert { padding:10px 14px; border-radius:var(--radius-sm); font-size:13px; margin-bottom:10px; }
+.alert-success { background:var(--success-bg); color:var(--success-text); border:0.5px solid #a5d6a7; }
+.alert-error { background:var(--danger-bg); color:var(--danger); border:0.5px solid #ef9a9a; }
+.hidden { display:none !important; }
+.mt8 { margin-top:8px; } .mt12 { margin-top:12px; } .mt16 { margin-top:16px; }
+.flex { display:flex; align-items:center; }
+.spinner { width:14px; height:14px; border:2px solid var(--accent); border-top-color:transparent; border-radius:50%; animation:spin .6s linear infinite; display:inline-block; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.account-item { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; border:0.5px solid var(--border); border-radius:var(--radius); background:var(--surface); margin-bottom:8px; }
+.acct-info { display:flex; align-items:center; gap:10px; }
+.acct-avatar { width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:600; flex-shrink:0; }
+.acct-chip { display:flex; align-items:center; gap:8px; padding:6px 12px; border:0.5px solid var(--border); border-radius:20px; cursor:pointer; font-size:13px; color:var(--text-muted); transition:all .12s; }
+.acct-chip.selected { border-color:var(--accent); background:var(--accent-bg); color:var(--accent); }
+.acct-chip-avatar { width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:600; flex-shrink:0; }
+.divider { border:none; border-top:0.5px solid var(--border); margin:1rem 0; }
+</style>
+</head>
+<body>
+
+<!-- ── LOGIN SCREEN ───────────────────────────────────────────────────────── -->
+<div class="login-wrap" id="loginScreen">
+  <div class="login-card">
+    <div class="login-logo">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="#1d9bf0"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+      Twitter Auto Poster
+    </div>
+    <div id="loginAlert"></div>
+    <div style="margin-bottom:12px">
+      <label>ユーザー名</label>
+      <input type="text" id="loginUser" placeholder="username" autocomplete="username">
+    </div>
+    <div style="margin-bottom:16px">
+      <label>パスワード</label>
+      <input type="password" id="loginPass" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="btn btn-primary" style="width:100%;justify-content:center;padding:10px" id="loginBtn" onclick="doLogin()">
+      ログイン
+    </button>
+  </div>
+</div>
+
+<!-- ── APP ───────────────────────────────────────────────────────────────── -->
+<div class="layout hidden" id="appScreen">
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="#1d9bf0"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+      Auto Poster
+    </div>
+    <div class="nav-item active" data-page="compose" onclick="showPage('compose')"><span class="nav-icon">✍</span> 投稿作成</div>
+    <div class="nav-item" data-page="history" onclick="showPage('history')"><span class="nav-icon">📋</span> 予約一覧</div>
+    <div class="nav-item admin-only hidden" data-page="accounts" onclick="showPage('accounts')"><span class="nav-icon">🐦</span> Twitterアカウント</div>
+    <div class="nav-item admin-only hidden" data-page="users" onclick="showPage('users')"><span class="nav-icon">👥</span> ユーザー管理</div>
+    <div class="nav-item" data-page="settings" onclick="showPage('settings')"><span class="nav-icon">⚙</span> 設定</div>
+    <div class="sidebar-bottom">
+      <div class="user-pill">
+        <div class="user-avatar" id="sidebarAvatar">-</div>
+        <div style="min-width:0">
+          <div style="font-weight:500;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" id="sidebarName">-</div>
+          <div style="font-size:11px;color:var(--text-hint)" id="sidebarRole">-</div>
+        </div>
+      </div>
+      <div class="nav-item" onclick="doLogout()" style="color:var(--danger)"><span class="nav-icon">↩</span> ログアウト</div>
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <!-- COMPOSE -->
+    <div class="page active" id="page-compose">
+      <div class="page-title">投稿を作成・予約</div>
+      <div id="composeAlert"></div>
+      <div class="card">
+        <div class="card-title">アカウント選択</div>
+        <div class="chips" id="accountChips"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">投稿設定</div>
+        <div class="row2">
+          <div>
+            <label>投稿の主題</label>
+            <input type="text" id="subjectInput" placeholder="例：新機能リリースのお知らせ">
+          </div>
+          <div>
+            <label>目的</label>
+            <div class="chips mt8" id="purposeChips">
+              <span class="chip" data-val="sales">売上向上</span>
+              <span class="chip" data-val="knowledge">ナレッジシェア</span>
+              <span class="chip" data-val="service">サービス紹介</span>
+              <span class="chip" data-val="line">公式LINE誘導</span>
+              <span class="chip" data-val="youtube">YouTube誘導</span>
+            </div>
+          </div>
+        </div>
+        <div class="mt12">
+          <label>作成投稿数</label>
+          <div class="chips mt8" id="countChips">
+            <span class="chip selected" data-val="1">1件</span>
+            <span class="chip" data-val="2">2件</span>
+            <span class="chip" data-val="3">3件</span>
+            <span class="chip" data-val="4">4件</span>
+          </div>
+        </div>
+        <div class="mt12">
+          <button class="btn btn-ai" id="genAllBtn" onclick="generateAll()">✦ AIで全投稿を一括生成</button>
+        </div>
+      </div>
+      <div id="postsContainer"></div>
+      <button class="btn btn-primary" style="width:100%;justify-content:center;padding:11px" id="scheduleBtn" onclick="submitSchedule()">
+        スケジュール登録する →
+      </button>
+    </div>
+
+    <!-- HISTORY -->
+    <div class="page" id="page-history">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem">
+        <div class="page-title" style="margin:0">予約一覧</div>
+        <button class="btn btn-sm" onclick="loadHistory()">↻ 更新</button>
+      </div>
+      <div class="card" style="padding:0;overflow:hidden">
+        <table class="post-table">
+          <thead><tr><th>投稿内容</th><th>予約日時</th><th>ステータス</th><th></th></tr></thead>
+          <tbody id="historyBody"><tr><td colspan="4" style="text-align:center;color:var(--text-hint);padding:2rem">読み込み中...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- TWITTER ACCOUNTS -->
+    <div class="page" id="page-accounts">
+      <div class="page-title">Twitterアカウント管理</div>
+      <div class="card">
+        <div class="card-title">新しいアカウントを追加</div>
+        <div class="row2">
+          <div><label>表示名</label><input type="text" id="newLabel" placeholder="@MyBrand"></div>
+          <div><label>API Key</label><input type="password" id="newApiKey" placeholder="••••••••"></div>
+        </div>
+        <div class="row2 mt8">
+          <div><label>API Secret</label><input type="password" id="newApiSecret" placeholder="••••••••"></div>
+          <div><label>Access Token</label><input type="password" id="newAccessToken" placeholder="••••••••"></div>
+        </div>
+        <div class="row2 mt8">
+          <div><label>Access Token Secret</label><input type="password" id="newAccessSecret" placeholder="••••••••"></div>
+          <div style="display:flex;align-items:flex-end"><button class="btn btn-primary" onclick="addAccount()" style="width:100%">追加する</button></div>
+        </div>
+        <div id="accountAlert" class="mt8"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">登録済みアカウント</div>
+        <div id="accountList"><div style="color:var(--text-hint);font-size:13px">読み込み中...</div></div>
+      </div>
+    </div>
+
+    <!-- USER MANAGEMENT (admin only) -->
+    <div class="page" id="page-users">
+      <div class="page-title">ユーザー管理</div>
+      <div class="card">
+        <div class="card-title">新しいユーザーを追加</div>
+        <div class="row2">
+          <div><label>ユーザー名</label><input type="text" id="nuUsername" placeholder="yamada_taro"></div>
+          <div><label>表示名</label><input type="text" id="nuDisplayName" placeholder="山田 太郎"></div>
+        </div>
+        <div class="row2 mt8">
+          <div><label>パスワード（8文字以上）</label><input type="password" id="nuPassword" placeholder="••••••••"></div>
+          <div>
+            <label>権限</label>
+            <select id="nuRole" style="margin-top:4px">
+              <option value="member">メンバー（一般）</option>
+              <option value="admin">管理者</option>
+            </select>
+          </div>
+        </div>
+        <div class="mt12"><button class="btn btn-primary" onclick="addUser()">ユーザーを追加する</button></div>
+        <div id="userAlert" class="mt8"></div>
+      </div>
+      <div class="card" style="padding:0;overflow:hidden">
+        <table class="post-table">
+          <thead><tr><th>ユーザー名</th><th>表示名</th><th>権限</th><th>状態</th><th>最終ログイン</th><th></th></tr></thead>
+          <tbody id="userTableBody"><tr><td colspan="6" style="text-align:center;color:var(--text-hint);padding:2rem">読み込み中...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div class="page" id="page-settings">
+      <div class="page-title">設定</div>
+      <div class="card" style="max-width:420px">
+        <div class="card-title">パスワード変更</div>
+        <div style="margin-bottom:10px"><label>現在のパスワード</label><input type="password" id="curPass" placeholder="••••••••"></div>
+        <div style="margin-bottom:10px"><label>新しいパスワード（8文字以上）</label><input type="password" id="newPass" placeholder="••••••••"></div>
+        <div style="margin-bottom:14px"><label>新しいパスワード（確認）</label><input type="password" id="newPass2" placeholder="••••••••"></div>
+        <button class="btn btn-primary" onclick="changePassword()">パスワードを変更する</button>
+        <div id="pwAlert" class="mt8"></div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+const API = '';
+let token = localStorage.getItem('tap_token') || '';
+let currentUser = null;
+let accounts = [];
+let selectedAccountId = null;
+let selectedPurpose = '';
+let postCount = 1;
+const imageData = {};
+
+// ── Auth ──────────────────────────────────────────────────────────────────────
+
+async function doLogin() {
+  const username = document.getElementById('loginUser').value.trim();
+  const password = document.getElementById('loginPass').value;
+  if (!username || !password) { showAlert('loginAlert','ユーザー名とパスワードを入力してください','error'); return; }
+  const btn = document.getElementById('loginBtn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> ログイン中...';
+  try {
+    const res = await fetch(API + '/api/auth/login', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({username, password})
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'ログインに失敗しました');
+    token = data.access_token;
+    localStorage.setItem('tap_token', token);
+    currentUser = { username: data.username, display_name: data.display_name, role: data.role };
+    enterApp();
+  } catch(e) {
+    showAlert('loginAlert', e.message, 'error');
+  }
+  btn.disabled = false; btn.innerHTML = 'ログイン';
+}
+
+function doLogout() {
+  token = ''; currentUser = null;
+  localStorage.removeItem('tap_token');
+  document.getElementById('loginScreen').classList.remove('hidden');
+  document.getElementById('appScreen').classList.add('hidden');
+  document.getElementById('loginPass').value = '';
+}
+
+async function enterApp() {
+  if (!token) return;
+  try {
+    const data = await apiFetch('/api/auth/me');
+    currentUser = data;
+  } catch {
+    doLogout(); return;
+  }
+  document.getElementById('loginScreen').classList.add('hidden');
+  document.getElementById('appScreen').classList.remove('hidden');
+
+  const initials = (currentUser.display_name || currentUser.username).slice(0,2).toUpperCase();
+  document.getElementById('sidebarAvatar').textContent = initials;
+  document.getElementById('sidebarName').textContent = currentUser.display_name;
+  document.getElementById('sidebarRole').textContent = currentUser.role === 'admin' ? '管理者' : 'メンバー';
+
+  // show/hide admin-only elements
+  document.querySelectorAll('.admin-only').forEach(el => {
+    el.classList.toggle('hidden', currentUser.role !== 'admin');
+  });
+
+  loadAccounts();
+  renderPosts();
+}
+
+// Try auto-login from stored token
+if (token) enterApp();
+
+// ── API helpers ───────────────────────────────────────────────────────────────
+
+async function apiFetch(path, options = {}) {
+  const headers = {'Content-Type':'application/json', ...(token ? {Authorization:'Bearer '+token} : {}), ...options.headers};
+  const res = await fetch(API + path, {...options, headers});
+  if (res.status === 401) { doLogout(); throw new Error('セッションが切れました。再ログインしてください'); }
+  if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.detail || res.statusText); }
+  return res.json();
+}
+
+// ── Navigation ────────────────────────────────────────────────────────────────
+
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-'+name).classList.add('active');
+  document.querySelector(`.nav-item[data-page="${name}"]`)?.classList.add('active');
+  if (name==='history') loadHistory();
+  if (name==='accounts') loadAccountList();
+  if (name==='users') loadUsers();
+}
+
+// ── Accounts ──────────────────────────────────────────────────────────────────
+
+async function loadAccounts() {
+  try { accounts = await apiFetch('/api/accounts'); } catch { accounts = []; }
+  const el = document.getElementById('accountChips'); el.innerHTML = '';
+  if (!accounts.length) { el.innerHTML = '<span style="font-size:12px;color:var(--text-hint)">管理者がTwitterアカウントを追加してください</span>'; return; }
+  const colors = ['#e8f4fd|#1d9bf0','#edf7ed|#2d6a2d','#fff8e1|#8c6d00','#fdeaea|#d32f2f'];
+  accounts.forEach((a,i) => {
+    const chip = document.createElement('span'); chip.className = 'acct-chip'+(a.account_id===selectedAccountId?' selected':'');
+    const [bg,color] = colors[i%colors.length].split('|');
+    const initials = a.label.replace('@','').slice(0,2).toUpperCase();
+    chip.innerHTML = `<span class="acct-chip-avatar" style="background:${bg};color:${color}">${initials}</span>${a.label}`;
+    chip.onclick = () => { selectedAccountId = a.account_id; document.querySelectorAll('.acct-chip').forEach(c=>c.classList.remove('selected')); chip.classList.add('selected'); };
+    el.appendChild(chip);
+  });
+  if (!selectedAccountId && accounts.length) { selectedAccountId = accounts[0].account_id; el.children[0]?.classList.add('selected'); }
+}
+
+async function loadAccountList() {
+  const list = document.getElementById('accountList'); list.innerHTML = '';
+  const accts = await apiFetch('/api/accounts').catch(()=>[]);
+  if (!accts.length) { list.innerHTML = '<div style="color:var(--text-hint);font-size:13px">まだアカウントが登録されていません</div>'; return; }
+  const colors = ['#e8f4fd|#1d9bf0','#edf7ed|#2d6a2d','#fff8e1|#8c6d00','#fdeaea|#d32f2f'];
+  accts.forEach((a,i) => {
+    const [bg,color] = colors[i%colors.length].split('|');
+    const initials = a.label.replace('@','').slice(0,2).toUpperCase();
+    const item = document.createElement('div'); item.className = 'account-item';
+    const canEdit = currentUser?.role === 'admin';
+    item.innerHTML = `<div class="acct-info"><div class="acct-avatar" style="background:${bg};color:${color}">${initials}</div><div style="font-weight:500">${a.label}</div></div>${canEdit?`<button class="btn btn-sm btn-danger" onclick="removeAccount('${a.account_id}')">削除</button>`:''}`;
+    list.appendChild(item);
+  });
+}
+
+async function addAccount() {
+  const body = { account_id: crypto.randomUUID(), label: v('newLabel'), api_key: v('newApiKey'), api_secret: v('newApiSecret'), access_token: v('newAccessToken'), access_token_secret: v('newAccessSecret') };
+  if (!body.label || !body.api_key) { showAlert('accountAlert','表示名とAPI Keyは必須です','error'); return; }
+  try {
+    await apiFetch('/api/accounts', {method:'POST', body:JSON.stringify(body)});
+    showAlert('accountAlert','アカウントを追加しました','success');
+    ['newLabel','newApiKey','newApiSecret','newAccessToken','newAccessSecret'].forEach(id=>document.getElementById(id).value='');
+    loadAccountList(); loadAccounts();
+  } catch(e) { showAlert('accountAlert',e.message,'error'); }
+}
+
+async function removeAccount(id) {
+  if (!confirm('このアカウントを削除しますか？')) return;
+  await apiFetch('/api/accounts/'+id,{method:'DELETE'});
+  loadAccountList(); loadAccounts();
+}
+
+// ── User management ───────────────────────────────────────────────────────────
+
+async function loadUsers() {
+  const tbody = document.getElementById('userTableBody');
+  const users = await apiFetch('/api/users').catch(()=>[]);
+  if (!users.length) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-hint);padding:2rem">ユーザーがいません</td></tr>'; return; }
+  tbody.innerHTML = '';
+  users.forEach(u => {
+    const tr = document.createElement('tr');
+    const lastLogin = u.last_login ? new Date(u.last_login).toLocaleDateString('ja-JP') : '—';
+    const isSelf = u.username === currentUser?.username;
+    tr.innerHTML = `
+      <td style="font-weight:500">${u.username}</td>
+      <td>${u.display_name}</td>
+      <td><span class="badge badge-${u.role}">${u.role==='admin'?'管理者':'メンバー'}</span></td>
+      <td><span class="badge ${u.is_active?'badge-active':'badge-inactive'}">${u.is_active?'有効':'無効'}</span></td>
+      <td style="color:var(--text-muted)">${lastLogin}</td>
+      <td style="display:flex;gap:6px;flex-wrap:wrap">
+        ${!isSelf ? `<button class="btn btn-sm" onclick="toggleActive('${u.username}',${u.is_active})">${u.is_active?'無効化':'有効化'}</button>` : ''}
+        ${!isSelf ? `<button class="btn btn-sm btn-danger" onclick="deleteUser('${u.username}')">削除</button>` : '<span style="font-size:11px;color:var(--text-hint)">自分</span>'}
+      </td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+async function addUser() {
+  const body = { username: v('nuUsername'), display_name: v('nuDisplayName'), password: document.getElementById('nuPassword').value, role: document.getElementById('nuRole').value };
+  if (!body.username || !body.display_name || !body.password) { showAlert('userAlert','全項目を入力してください','error'); return; }
+  try {
+    await apiFetch('/api/users',{method:'POST',body:JSON.stringify(body)});
+    showAlert('userAlert','ユーザーを追加しました','success');
+    ['nuUsername','nuDisplayName','nuPassword'].forEach(id=>document.getElementById(id).value='');
+    loadUsers();
+  } catch(e) { showAlert('userAlert',e.message,'error'); }
+}
+
+async function toggleActive(username, currentState) {
+  await apiFetch(`/api/users/${username}/active`,{method:'PATCH',body:JSON.stringify({is_active:!currentState})});
+  loadUsers();
+}
+
+async function deleteUser(username) {
+  if (!confirm(`${username} を削除しますか？`)) return;
+  await apiFetch(`/api/users/${username}`,{method:'DELETE'});
+  loadUsers();
+}
+
+// ── Password change ───────────────────────────────────────────────────────────
+
+async function changePassword() {
+  const cur = document.getElementById('curPass').value;
+  const nw = document.getElementById('newPass').value;
+  const nw2 = document.getElementById('newPass2').value;
+  if (!cur || !nw) { showAlert('pwAlert','全項目を入力してください','error'); return; }
+  if (nw !== nw2) { showAlert('pwAlert','新しいパスワードが一致しません','error'); return; }
+  if (nw.length < 8) { showAlert('pwAlert','パスワードは8文字以上にしてください','error'); return; }
+  try {
+    await apiFetch('/api/auth/change-password',{method:'POST',body:JSON.stringify({current_password:cur,new_password:nw})});
+    showAlert('pwAlert','パスワードを変更しました','success');
+    ['curPass','newPass','newPass2'].forEach(id=>document.getElementById(id).value='');
+  } catch(e) { showAlert('pwAlert',e.message,'error'); }
+}
+
+// ── Compose ───────────────────────────────────────────────────────────────────
+
+document.querySelectorAll('#purposeChips .chip').forEach(c => {
+  c.onclick = () => { document.querySelectorAll('#purposeChips .chip').forEach(x=>x.classList.remove('selected')); c.classList.add('selected'); selectedPurpose = c.dataset.val; };
+});
+document.querySelectorAll('#countChips .chip').forEach(c => {
+  c.onclick = () => { document.querySelectorAll('#countChips .chip').forEach(x=>x.classList.remove('selected')); c.classList.add('selected'); postCount = +c.dataset.val; renderPosts(); };
+});
+
+function v(id) { return document.getElementById(id)?.value?.trim()||''; }
+
+function renderPosts() {
+  const container = document.getElementById('postsContainer');
+  const saved = {};
+  container.querySelectorAll('.post-block').forEach((b,i)=>{ saved[i]={text:b.querySelector('textarea')?.value,dt:b.querySelector('input[type=datetime-local]')?.value}; });
+  container.innerHTML = '';
+  for (let i=0;i<postCount;i++) {
+    const d = new Date(); d.setDate(d.getDate()+i); d.setHours(9,0,0,0);
+    const block = document.createElement('div'); block.className='post-block';
+    block.innerHTML = `
+      <div class="post-block-head">
+        <span class="post-num">投稿 ${i+1}</span>
+        <button class="btn btn-ai btn-sm" onclick="generateOne(${i})">✦ AI生成</button>
+      </div>
+      <textarea id="ta${i}" placeholder="投稿内容を入力またはAI生成してください..." oninput="countChars(${i})">${saved[i]?.text||''}</textarea>
+      <div class="char-count" id="cc${i}">0 / 280</div>
+      <div class="mt8"><label>投稿日時</label><input type="datetime-local" id="dt${i}" value="${saved[i]?.dt||d.toISOString().slice(0,16)}"></div>
+      <div class="mt8"><label>添付画像（最大2枚）</label><div class="img-area" id="imgArea${i}"></div></div>
+      <input type="file" id="fi${i}" accept="image/*" multiple style="display:none" onchange="handleFiles(${i},this)">`;
+    container.appendChild(block);
+    renderImages(i); countChars(i);
+  }
+}
+
+function countChars(i) {
+  const len=(document.getElementById('ta'+i)?.value||'').length;
+  const el=document.getElementById('cc'+i);
+  el.textContent=len+' / 280'; el.className='char-count'+(len>280?' char-over':'');
+}
+function handleFiles(i,input) {
+  if (!imageData[i]) imageData[i]=[];
+  Array.from(input.files).slice(0,2-imageData[i].length).forEach(f=>{
+    const r=new FileReader(); r.onload=e=>{imageData[i].push({src:e.target.result,name:f.name,file:f});renderImages(i);}; r.readAsDataURL(f);
+  }); input.value='';
+}
+function renderImages(i) {
+  const area=document.getElementById('imgArea'+i); if(!area)return;
+  area.innerHTML='';
+  (imageData[i]||[]).forEach((img,j)=>{
+    const slot=document.createElement('div'); slot.className='img-slot';
+    slot.innerHTML=`<img src="${img.src}"><button class="img-rm" onclick="removeImg(${i},${j})">×</button>`;
+    area.appendChild(slot);
+  });
+  if((imageData[i]||[]).length<2){
+    const btn=document.createElement('button'); btn.className='add-img'; btn.type='button';
+    btn.innerHTML='+<span style="font-size:9px">画像</span>'; btn.onclick=()=>document.getElementById('fi'+i).click();
+    area.appendChild(btn);
+  }
+}
+function removeImg(i,j){imageData[i].splice(j,1);renderImages(i);}
+
+const purposeMap={sales:'売上向上',knowledge:'ナレッジシェア',service:'サービス紹介',line:'公式LINE誘導',youtube:'YouTube誘導'};
+
+async function callClaude(prompt) {
+  const res = await fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:prompt}]})
+  });
+  const data=await res.json();
+  return data.content.map(c=>c.text||'').join('');
+}
+
+async function generateAll() {
+  const subject=v('subjectInput'); if(!subject){alert('投稿の主題を入力してください');return;}
+  const btn=document.getElementById('genAllBtn');
+  btn.disabled=true; btn.innerHTML='<span class="spinner"></span> 生成中...';
+  try {
+    const text=await callClaude(`Twitterの投稿を${postCount}件作成してください。\n主題：${subject}\n目的：${purposeMap[selectedPurpose]||'情報発信'}\n条件：各280文字以内の日本語、ハッシュタグ1〜3個、各投稿を「---」で区切る、投稿文のみ出力`);
+    text.split('---').map(s=>s.trim()).filter(s=>s).slice(0,postCount).forEach((p,i)=>{const ta=document.getElementById('ta'+i);if(ta){ta.value=p;countChars(i);}});
+  } catch(e){alert('AI生成エラー: '+e.message);}
+  btn.disabled=false; btn.innerHTML='✦ AIで全投稿を一括生成';
+}
+
+async function generateOne(i) {
+  const subject=v('subjectInput')||'一般的なビジネス情報';
+  const btn=document.querySelectorAll('.post-block')[i]?.querySelector('.btn-ai');
+  if(btn){btn.disabled=true;btn.innerHTML='<span class="spinner"></span>';}
+  try {
+    const text=await callClaude(`Twitterの投稿1件を作成してください。\n主題：${subject}\n目的：${purposeMap[selectedPurpose]||'情報発信'}\n条件：280文字以内の日本語、ハッシュタグ1〜3個、投稿文のみ出力`);
+    const ta=document.getElementById('ta'+i);if(ta){ta.value=text.trim();countChars(i);}
+  } catch(e){alert('AI生成エラー: '+e.message);}
+  if(btn){btn.disabled=false;btn.innerHTML='✦ AI生成';}
+}
+
+async function submitSchedule() {
+  if(!selectedAccountId){showAlert('composeAlert','アカウントを選択してください','error');return;}
+  const posts=[];
+  for(let i=0;i<postCount;i++){
+    const text=document.getElementById('ta'+i)?.value?.trim();
+    const dt=document.getElementById('dt'+i)?.value;
+    if(!text){showAlert('composeAlert',`投稿${i+1}の内容を入力してください`,'error');return;}
+    if(!dt){showAlert('composeAlert',`投稿${i+1}の日時を設定してください`,'error');return;}
+    if(text.length>280){showAlert('composeAlert',`投稿${i+1}が280文字を超えています`,'error');return;}
+    const imagePaths=[];
+    for(const img of(imageData[i]||[])){
+      if(img.file){
+        const fd=new FormData();fd.append('file',img.file);
+        const r=await fetch(API+'/api/upload-image',{method:'POST',headers:{Authorization:'Bearer '+token},body:fd});
+        const d=await r.json();imagePaths.push(d.path);
+      }
+    }
+    posts.push({text,scheduled_at:new Date(dt).toISOString(),image_paths:imagePaths});
+  }
+  const btn=document.getElementById('scheduleBtn');
+  btn.disabled=true;btn.innerHTML='<span class="spinner"></span> 登録中...';
+  try {
+    await apiFetch('/api/schedule',{method:'POST',body:JSON.stringify({account_id:selectedAccountId,posts})});
+    showAlert('composeAlert','スケジュール登録が完了しました！','success');
+    Object.keys(imageData).forEach(k=>delete imageData[k]);
+    renderPosts();
+  } catch(e){showAlert('composeAlert','エラー: '+e.message,'error');}
+  btn.disabled=false;btn.innerHTML='スケジュール登録する →';
+}
+
+// ── History ───────────────────────────────────────────────────────────────────
+
+async function loadHistory() {
+  const tbody=document.getElementById('historyBody');
+  tbody.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--text-hint);padding:2rem">読み込み中...</td></tr>';
+  try {
+    const posts=await apiFetch('/api/posts');
+    if(!posts.length){tbody.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--text-hint);padding:2rem">予約投稿はありません</td></tr>';return;}
+    tbody.innerHTML='';
+    posts.forEach(p=>{
+      const tr=document.createElement('tr');
+      const dt=new Date(p.scheduled_at);
+      const dtStr=dt.toLocaleDateString('ja-JP')+' '+dt.toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'});
+      const badge=`<span class="badge badge-${p.status}">${{pending:'予約中',posted:'投稿済',failed:'失敗',cancelled:'キャンセル'}[p.status]||p.status}</span>`;
+      tr.innerHTML=`<td><div class="post-text-preview">${p.text}</div></td><td style="white-space:nowrap;color:var(--text-muted)">${dtStr}</td><td>${badge}${p.tweet_id?`<a href="https://twitter.com/i/web/status/${p.tweet_id}" target="_blank" style="font-size:11px;color:var(--accent);display:block;margin-top:2px">ツイートを見る</a>`:''}</td><td>${p.status==='pending'?`<button class="btn btn-sm btn-danger" onclick="cancelPost('${p.post_id}')">取消</button>`:''}`;
+      tbody.appendChild(tr);
+    });
+  } catch(e){tbody.innerHTML=`<tr><td colspan="4" style="color:var(--danger);padding:1rem">エラー: ${e.message}</td></tr>`;}
+}
+
+async function cancelPost(id){if(!confirm('この予約を取り消しますか？'))return;await apiFetch('/api/posts/'+id,{method:'DELETE'});loadHistory();}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function showAlert(id,msg,type='success'){
+  const el=document.getElementById(id);if(!el)return;
+  el.innerHTML=`<div class="alert alert-${type}">${msg}</div>`;
+  setTimeout(()=>el.innerHTML='',5000);
+}
+</script>
+</body>
+</html>
