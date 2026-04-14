@@ -554,22 +554,13 @@ function removeImg(i,j){imageData[i].splice(j,1);renderImages(i);}
 
 const purposeMap={sales:'売上向上',knowledge:'ナレッジシェア',service:'サービス紹介',line:'公式LINE誘導',youtube:'YouTube誘導'};
 
-async function callClaude(prompt) {
-  const res = await fetch('https://api.anthropic.com/v1/messages',{
-    method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:prompt}]})
-  });
-  const data=await res.json();
-  return data.content.map(c=>c.text||'').join('');
-}
-
 async function generateAll() {
   const subject=v('subjectInput'); if(!subject){alert('投稿の主題を入力してください');return;}
   const btn=document.getElementById('genAllBtn');
   btn.disabled=true; btn.innerHTML='<span class="spinner"></span> 生成中...';
   try {
-    const text=await callClaude(`Twitterの投稿を${postCount}件作成してください。\n主題：${subject}\n目的：${purposeMap[selectedPurpose]||'情報発信'}\n条件：各280文字以内の日本語、ハッシュタグ1〜3個、各投稿を「---」で区切る、投稿文のみ出力`);
-    text.split('---').map(s=>s.trim()).filter(s=>s).slice(0,postCount).forEach((p,i)=>{const ta=document.getElementById('ta'+i);if(ta){ta.value=p;countChars(i);}});
+    const data=await apiFetch('/api/generate',{method:'POST',body:JSON.stringify({subject,purpose:purposeMap[selectedPurpose]||'情報発信',count:postCount})});
+    data.posts.forEach((p,i)=>{const ta=document.getElementById('ta'+i);if(ta){ta.value=p;countChars(i);}});
   } catch(e){alert('AI生成エラー: '+e.message);}
   btn.disabled=false; btn.innerHTML='✦ AIで全投稿を一括生成';
 }
@@ -579,8 +570,9 @@ async function generateOne(i) {
   const btn=document.querySelectorAll('.post-block')[i]?.querySelector('.btn-ai');
   if(btn){btn.disabled=true;btn.innerHTML='<span class="spinner"></span>';}
   try {
-    const text=await callClaude(`Twitterの投稿1件を作成してください。\n主題：${subject}\n目的：${purposeMap[selectedPurpose]||'情報発信'}\n条件：280文字以内の日本語、ハッシュタグ1〜3個、投稿文のみ出力`);
-    const ta=document.getElementById('ta'+i);if(ta){ta.value=text.trim();countChars(i);}
+    const existing=Array.from({length:postCount},(_,j)=>document.getElementById('ta'+j)?.value||'').filter((t,j)=>t&&j!==i);
+    const data=await apiFetch('/api/generate',{method:'POST',body:JSON.stringify({subject,purpose:purposeMap[selectedPurpose]||'情報発信',count:1,existing,single_index:i})});
+    const ta=document.getElementById('ta'+i);if(ta){ta.value=data.posts[0]||'';countChars(i);}
   } catch(e){alert('AI生成エラー: '+e.message);}
   if(btn){btn.disabled=false;btn.innerHTML='✦ AI生成';}
 }

@@ -1,10 +1,9 @@
 services:
-  # ── Web Service (FastAPI backend + frontend static files) ──────────────────
   - type: web
     name: twitter-scheduler
     runtime: python
-    region: singapore          # closest to Japan
-    plan: starter              # $7/month — required for persistent disk
+    region: singapore
+    plan: starter
     rootDir: backend
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
@@ -16,19 +15,7 @@ services:
       - key: DATABASE_URL
         value: sqlite:////opt/render/project/src/scheduler.db
       - key: ANTHROPIC_API_KEY
-        sync: false            # set manually in Render dashboard
+        sync: false
       - key: PYTHON_VERSION
-        value: "3.11.0"
+        value: "3.13.1"
     healthCheckPath: /health
-
-  # ── Optional: separate Cron Job to retry failed posts ─────────────────────
-  # - type: cron
-  #   name: retry-failed-posts
-  #   runtime: python
-  #   schedule: "*/30 * * * *"   # every 30 min
-  #   rootDir: backend
-  #   buildCommand: pip install -r requirements.txt
-  #   startCommand: python retry_failed.py
-  #   envVars:
-  #     - key: DATABASE_URL
-  #       sync: false
