@@ -2,6 +2,7 @@ import os
 import json
 import uuid
 import logging
+import anthropic
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -12,7 +13,6 @@ from pydantic import BaseModel
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 
-import anthropic
 from database import db, ScheduledPost
 from twitter_client import post_tweet
 from auth import (
@@ -39,6 +39,7 @@ jobstores = {
 }
 scheduler = BackgroundScheduler(jobstores=jobstores, timezone="Asia/Tokyo")
 scheduler.start()
+
 
 # ── Bootstrap admin on first boot ────────────────────────────────────────────
 
@@ -92,6 +93,13 @@ class AccountConfig(BaseModel):
     api_secret: str
     access_token: str
     access_token_secret: str
+
+class GenerateRequest(BaseModel):
+    subject: str
+    purpose: str = ""
+    count: int = 1
+    existing: list[str] = []
+    single_index: Optional[int] = None
 
 
 # ── Auth routes (public) ──────────────────────────────────────────────────────
@@ -200,6 +208,49 @@ def delete_account(account_id: str, admin: dict = Depends(require_admin)):
     return {"ok": True}
 
 
+# ── AI generation (login required) ───────────────────────────────────────────
+
+@app.post("/api/generate")
+def generate_tweets(req: GenerateRequest, user: dict = Depends(get_current_user)):
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY が設定されていません")
+
+    client = anthropic.Anthropic(api_key=api_key)
+
+    if req.single_index is not None:
+        existing_text = "\n".join(req.existing) if req.existing else ""
+        prompt = (
+            f"Twitterの投稿1件を作成してください。\n"
+            f"主題：{req.subject}\n"
+            f"目的：{req.purpose or '情報発信'}\n"
+            + (f"他の投稿との重複を避けてください:\n{existing_text}\n" if existing_text else "")
+            + "条件：280文字以内の日本語、ハッシュタグ1〜3個、投稿文のみ出力"
+        )
+        message = client.messages.create(
+            model="claude-opus-4-5",
+            max_tokens=400,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        text = message.content[0].text.strip()
+        return {"posts": [text]}
+    else:
+        prompt = (
+            f"Twitterの投稿を{req.count}件作成してください。\n"
+            f"主題：{req.subject}\n"
+            f"目的：{req.purpose or '情報発信'}\n"
+            f"条件：各280文字以内の日本語、ハッシュタグ1〜3個、各投稿を「---」で区切る、投稿文のみ出力"
+        )
+        message = client.messages.create(
+            model="claude-opus-4-5",
+            max_tokens=1000,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        text = message.content[0].text
+        posts = [p.strip() for p in text.split("---") if p.strip()]
+        return {"posts": posts[:req.count]}
+
+
 # ── Post routes (login required) ──────────────────────────────────────────────
 
 @app.post("/api/upload-image")
@@ -290,53 +341,3 @@ def execute_post(post_id: str):
 # ── Static frontend ───────────────────────────────────────────────────────────
 if os.path.exists("frontend/public"):
     app.mount("/", StaticFiles(directory="frontend/public", html=True), name="frontend")
-
-
-# ── AI generation route (login required) ─────────────────────────────────────
-
-class GenerateRequest(BaseModel):
-    subject: str
-    purpose: str = ""
-    count: int = 1
-    existing: list[str] = []
-    single_index: Optional[int] = None
-
-@app.post("/api/generate")
-def generate_tweets(req: GenerateRequest, user: dict = Depends(get_current_user)):
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY が設定されていません")
-
-    client = anthropic.Anthropic(api_key=api_key)
-
-    if req.single_index is not None:
-        existing_text = "\n".join(req.existing) if req.existing else ""
-        prompt = (
-            f"Twitterの投稿1件を作成してください。\n"
-            f"主題：{req.subject}\n"
-            f"目的：{req.purpose or '情報発信'}\n"
-            + (f"他の投稿との重複を避けてください:\n{existing_text}\n" if existing_text else "")
-            + "条件：280文字以内の日本語、ハッシュタグ1〜3個、投稿文のみ出力"
-        )
-        message = client.messages.create(
-            model="claude-opus-4-5",
-            max_tokens=400,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        text = message.content[0].text.strip()
-        return {"posts": [text]}
-    else:
-        prompt = (
-            f"Twitterの投稿を{req.count}件作成してください。\n"
-            f"主題：{req.subject}\n"
-            f"目的：{req.purpose or '情報発信'}\n"
-            f"条件：各280文字以内の日本語、ハッシュタグ1〜3個、各投稿を「---」で区切る、投稿文のみ出力"
-        )
-        message = client.messages.create(
-            model="claude-opus-4-5",
-            max_tokens=1000,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        text = message.content[0].text
-        posts = [p.strip() for p in text.split("---") if p.strip()]
-        return {"posts": posts[:req.count]}
