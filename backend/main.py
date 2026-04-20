@@ -339,5 +339,15 @@ def execute_post(post_id: str):
 
 
 # ── Static frontend ───────────────────────────────────────────────────────────
+from fastapi.responses import FileResponse, HTMLResponse
+
 if os.path.exists("frontend/public"):
-    app.mount("/", StaticFiles(directory="frontend/public", html=True), name="frontend")
+    app.mount("/static", StaticFiles(directory="frontend/public"), name="static")
+
+@app.get("/", response_class=HTMLResponse)
+@app.get("/{full_path:path}", response_class=HTMLResponse)
+async def serve_frontend(full_path: str = ""):
+    index = "frontend/public/index.html"
+    if os.path.exists(index) and not full_path.startswith("api/"):
+        return FileResponse(index)
+    raise HTTPException(status_code=404, detail="Not found")
